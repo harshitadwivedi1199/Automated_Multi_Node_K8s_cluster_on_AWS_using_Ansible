@@ -1,0 +1,89 @@
+---
+# tasks file for master
+
+- name: Installing Docker and iproute-tc
+  package:
+          name:
+          - docker
+          - iproute-tc
+          state: present
+
+- name: Starting docker services and enabling it
+  service:
+          name: docker
+          state: started
+          enabled: yes
+
+- name: Configuring Yum repo for k8s
+  yum_repository:
+    name: kubernetes
+    description: repo for k8s
+    baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+    enabled: yes
+    gpgcheck: yes
+    repo_gpgcheck: yes
+    gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+    exclude: 
+    - kubelet 
+    - kubeadm 
+    - kubectl
+
+- name: Installing kubeadm
+  package:
+          name: kubeadm
+          disable_excludes: kubernetes
+
+- name: Enabling kubelet service
+  service:
+    name: kubelet
+    state: started
+    enabled: yes
+
+- name: To change driver , Creating content of the daemon.json file
+  copy:
+    dest: /etc/docker/daemon.json
+    content: |
+            {
+                "exec-opts": ["native.cgroupdriver=systemd"]
+            }
+  register: driver_change
+
+- name: Restarting docker service
+  service:
+      name: docker
+      state: restarted
+  when: driver_change.changed == true
+
+- name: Add rules to iproute-tc configuration file
+  copy:
+    dest: /etc/sysctl.d/k8s.conf
+    content: |
+            net.bridge.bridge-nf-call-ip6tables = 1
+            net.bridge.bridge-nf-call-iptables = 1
+
+- name: Refreshing sysctl 
+  shell: "sysctl --system"
+  changed_when: false
+
+
+- name: Pulling all Required images of k8s
+  shell: kubeadm config images pull
+  changed_when: false
+
+
+- name: Starting kubeadm service
+  shell: "kubeadm init --pod-network-cidr='10.240.0.0/16' --ignore-preflight-errors=NumCPU --ignore-preflight-errors=Mem"
+- name: Creating .kube file
+  file:
+    path: $HOME/.kube
+    state: directory
+
+- name: Copying file config file
+  copy:
+    dest: $HOME/.kube/config
+    src: /etc/kubernetes/admin.conf
+    remote_src: yes
+- name: Copying kube-flannel.yml file
+  template:
+    dest: /root
+    src: kube-flannel.yml 

@@ -1,0 +1,32 @@
+- hosts: master
+  roles:
+  - role: master
+- hosts: slave
+  roles:
+  - role: slave
+
+- hosts: master
+  tasks:
+  - name: Getting join command
+    shell: "kubeadm token  create --print-join-command"
+    register: join
+
+  - set_fact:
+      shared_variable: "{{ join.stdout }}"
+
+  - add_host:
+      name: "value"
+      shared_variable: "{{ shared_variable }}"
+
+- hosts: slave
+  vars:
+    join_link: "{{ hostvars['value']['shared_variable'] }}"
+  tasks:
+  - name: Joining to master node
+    shell: "{{ join_link }}"
+
+- hosts: master
+  tasks:
+  - name: Running Kube Flannel
+    shell: kubectl apply -f /root/kube-flannel.yml 
+

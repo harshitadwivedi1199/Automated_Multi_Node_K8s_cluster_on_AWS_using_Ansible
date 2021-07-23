@@ -1,0 +1,61 @@
+- hosts: localhost
+  tasks:
+  - name: "Installing Python Package"
+    package:
+            name: "python3"
+  - name: "Installing boto3 library"
+    pip:
+            name: "boto3"
+  - name: "Launching Master instance"
+    ec2_instance:
+            region: "ap-south-1"
+            name: "master"
+            instance_type: "t2.micro"
+            wait: yes
+            wait_timeout: 20
+            key_name: "mymainkey1122"
+            image_id: "ami-08e0ca9924195beba"
+            security_group: "sg-04f4c03f3c35168c3"
+            state: present
+    register: master
+  - name: "Launching Slave-1 instance"
+    ec2_instance:
+       region: "ap-south-1"
+       name: "slave1"
+       wait: yes
+       wait_timeout: 20
+       instance_type: "t2.micro"
+       key_name: "mymainkey1122"
+       image_id: "ami-08e0ca9924195beba"
+       security_group: "sg-04f4c03f3c35168c3"
+       tags:
+          group: slave
+       state: present
+    register: slave1
+
+  - name: "Launching Slave-2 Instance"
+    ec2_instance:
+       region: "ap-south-1"
+       name: "slave2"
+       tags:
+          group: slave
+       instance_type: "t2.micro"
+       wait: yes
+       wait_timeout: 20
+       key_name: "mymainkey1122"
+       image_id: "ami-08e0ca9924195beba"
+       security_group: "sg-04f4c03f3c35168c3"
+       state: present
+    register: slave2
+
+  - name: Updating inventory
+    blockinfile:
+       path: /task19/inventory.txt
+       marker: "# 1st {mark} ANSIBLE MANAGED BLOCK "
+       block: |
+               [{{ master.instances[0].tags.Name }}]
+               {{ master.instances[0].public_ip_address }}
+               [{{ slave1.instances[0].tags.group }}]
+               {{ slave1.instances[0].public_ip_address }}
+               {{ slave2.instances[0].public_ip_address }}
+
